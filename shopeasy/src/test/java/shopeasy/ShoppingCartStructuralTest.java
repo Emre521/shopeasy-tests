@@ -5,36 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;
 
-/**
- * Task 2 – Structural Testing &amp; Code Coverage (Chapter 3)
- *
- * <p>Target class: {@link ShoppingCart}
- *
- * <h3>Workflow</h3>
- * <ol>
- *   <li>Write an initial test suite based on the specification (Javadoc of ShoppingCart).</li>
- *   <li>Run {@code mvn test} to generate the JaCoCo report:
- *       <pre>  target/site/jacoco/index.html</pre></li>
- *   <li>Open the report, navigate to {@code ShoppingCart}, and identify uncovered branches.</li>
- *   <li>Add tests specifically to cover those branches until branch coverage &gt;= 80%.</li>
- *   <li>Take a screenshot of the final JaCoCo summary and put it in {@code report/jacoco-screenshot.png}.</li>
- * </ol>
- *
- * <h3>Branches to think about</h3>
- * <ul>
- *   <li>{@code addItem}: product already in cart vs. new product</li>
- *   <li>{@code removeItem}: product found vs. not found in cart</li>
- *   <li>{@code updateQuantity}: product found vs. not found, quantity valid vs. invalid</li>
- *   <li>{@code applyDiscount}: zero discount, positive discount</li>
- *   <li>{@code total}: empty cart vs. non-empty cart</li>
- * </ul>
- *
- * <h3>Bonus (PIT Mutation Testing)</h3>
- * Run: {@code mvn org.pitest:pitest-maven:mutationCoverage}
- * <br>Examine the HTML report in {@code target/pit-reports/}. Find two surviving mutants,
- * explain why each survived, and describe a test that would kill it. Add this analysis
- * to your reflection report.
- */
 class ShoppingCartStructuralTest {
 
     private ShoppingCart cart;
@@ -49,11 +19,176 @@ class ShoppingCartStructuralTest {
     }
 
     // -----------------------------------------------------------------------
-    // TODO: Write your tests below.
-    //
-    // Start with happy-path tests, then add tests that target specific branches.
-    //
-    // HINT: Run `mvn test` after every few tests to see coverage progress.
+    // addItem — yeni ürün ekleme (new product branch)
     // -----------------------------------------------------------------------
 
+    @Test
+    void addNewItemIncreasesItemCount() {
+        cart.addItem(apple, 3);
+        assertThat(cart.itemCount()).isEqualTo(1);
+    }
+
+    @Test
+    void addNewItemUpdatesTotal() {
+        cart.addItem(apple, 2);
+        assertThat(cart.total()).isCloseTo(3.0, within(0.001));
+    }
+
+    // -----------------------------------------------------------------------
+    // addItem — aynı ürün tekrar eklenince miktar birleşmeli (existing product branch)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void addSameItemTwiceCombinesQuantity() {
+        cart.addItem(apple, 2);
+        cart.addItem(apple, 3);
+        assertThat(cart.itemCount()).isEqualTo(1);
+        assertThat(cart.total()).isCloseTo(7.5, within(0.001)); // 5 * 1.50
+    }
+
+    @Test
+    void addDifferentItemsKeepsSeparateLines() {
+        cart.addItem(apple, 1);
+        cart.addItem(banana, 1);
+        assertThat(cart.itemCount()).isEqualTo(2);
+    }
+
+    // -----------------------------------------------------------------------
+    // removeItem — sepette olan ürünü kaldırma (found branch)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void removeExistingItemDecreasesCount() {
+        cart.addItem(apple, 2);
+        cart.removeItem("P001");
+        assertThat(cart.itemCount()).isEqualTo(0);
+    }
+
+    @Test
+    void removeExistingItemUpdatesTotal() {
+        cart.addItem(apple, 2);
+        cart.addItem(banana, 1);
+        cart.removeItem("P001");
+        assertThat(cart.total()).isCloseTo(0.80, within(0.001));
+    }
+
+    // -----------------------------------------------------------------------
+    // removeItem — sepette olmayan ürünü kaldırma (not found branch — no-op)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void removeNonExistingItemDoesNothing() {
+        cart.addItem(apple, 2);
+        cart.removeItem("P999");
+        assertThat(cart.itemCount()).isEqualTo(1);
+    }
+
+    // -----------------------------------------------------------------------
+    // updateQuantity — ürün bulundu, geçerli miktar (happy path)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void updateQuantityChangesTotal() {
+        cart.addItem(apple, 1);
+        cart.updateQuantity("P001", 5);
+        assertThat(cart.total()).isCloseTo(7.5, within(0.001));
+    }
+
+    // -----------------------------------------------------------------------
+    // updateQuantity — geçersiz miktar (quantity <= 0 branch)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void updateQuantityWithZeroThrows() {
+        cart.addItem(apple, 1);
+        assertThatThrownBy(() -> cart.updateQuantity("P001", 0))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateQuantityWithNegativeThrows() {
+        cart.addItem(apple, 1);
+        assertThatThrownBy(() -> cart.updateQuantity("P001", -1))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // -----------------------------------------------------------------------
+    // updateQuantity — ürün sepette yok (not found branch)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void updateQuantityForMissingProductThrows() {
+        assertThatThrownBy(() -> cart.updateQuantity("P999", 3))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("not found");
+    }
+
+    // -----------------------------------------------------------------------
+    // applyDiscount — sıfır indirim (zero discount branch)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void applyZeroDiscountReturnsSameTotal() {
+        cart.addItem(apple, 4); // 6.0
+        assertThat(cart.applyDiscount(0)).isCloseTo(6.0, within(0.001));
+    }
+
+    // -----------------------------------------------------------------------
+    // applyDiscount — pozitif indirim (positive discount branch)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void applyDiscountReducesTotal() {
+        cart.addItem(apple, 4); // 6.0
+        assertThat(cart.applyDiscount(50)).isCloseTo(3.0, within(0.001));
+    }
+
+    @Test
+    void applyFullDiscountReturnsZero() {
+        cart.addItem(apple, 2);
+        assertThat(cart.applyDiscount(100)).isCloseTo(0.0, within(0.001));
+    }
+
+    // -----------------------------------------------------------------------
+    // total — boş sepet (empty cart branch)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void emptyCartTotalIsZero() {
+        assertThat(cart.total()).isEqualTo(0.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // clear — sepeti temizleme
+    // -----------------------------------------------------------------------
+
+    @Test
+    void clearRemovesAllItems() {
+        cart.addItem(apple, 1);
+        cart.addItem(banana, 2);
+        cart.clear();
+        assertThat(cart.itemCount()).isEqualTo(0);
+        assertThat(cart.total()).isEqualTo(0.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // getItems — unmodifiable list kontrolü
+    // -----------------------------------------------------------------------
+
+    @Test
+    void getItemsReturnsUnmodifiableList() {
+        cart.addItem(apple, 1);
+        assertThatThrownBy(() -> cart.getItems().add(new CartItem(banana, 1)))
+            .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    // -----------------------------------------------------------------------
+    // toString — smoke test
+    // -----------------------------------------------------------------------
+
+    @Test
+    void toStringContainsItemCountAndTotal() {
+        cart.addItem(apple, 2);
+        assertThat(cart.toString()).contains("items=1").contains("total=");
+    }
 }
