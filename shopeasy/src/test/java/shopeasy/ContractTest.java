@@ -5,38 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;
 
-/**
- * Task 3 – Design by Contract (Chapter 4)
- *
- * <p>This task has two parts:
- *
- * <h3>Part A – Add contracts to production code</h3>
- * Open {@link ShoppingCart} and {@link PriceCalculator} and add {@code assert}
- * statements for the pre-conditions and post-conditions described in their Javadoc.
- * Note: assertions are enabled via {@code -ea} in Maven Surefire (already configured
- * in {@code pom.xml}).
- *
- * <p>Contracts to implement:
- * <ul>
- *   <li><b>ShoppingCart.addItem</b>: pre — {@code product != null}, {@code quantity > 0};
- *       post — {@code itemCount()} increased or product quantity updated.</li>
- *   <li><b>ShoppingCart.applyDiscount</b>: pre — {@code 0 <= discountRate <= 100};
- *       post — result &lt;= {@code total()} when {@code discountRate > 0}.</li>
- *   <li><b>PriceCalculator.calculate</b>: pre — {@code basePrice >= 0},
- *       {@code 0 <= discountRate <= 100}, {@code 0 <= taxRate <= 100};
- *       post — result {@code >= 0}.</li>
- *   <li><b>ShoppingCart invariant</b>: {@code total() >= 0} after any operation.</li>
- * </ul>
- *
- * <h3>Part B – Write contract tests</h3>
- * Write tests below that:
- * <ol>
- *   <li>Verify contracts hold for valid inputs (positive tests).</li>
- *   <li>Verify contracts are violated ({@code AssertionError}) for invalid inputs (negative tests).</li>
- * </ol>
- *
- * <p>Use {@code assertThatThrownBy(...).isInstanceOf(AssertionError.class)} to test violations.
- */
 class ContractTest {
 
     private ShoppingCart cart;
@@ -51,22 +19,128 @@ class ContractTest {
     }
 
     // -----------------------------------------------------------------------
-    // TODO: Write your contract tests below.
-    //
-    // EXAMPLE — pre-condition violation (fill in the correct assertion):
-    //
-    // @Test
-    // void addItem_nullProduct_shouldViolatePreCondition() {
-    //     assertThatThrownBy(() -> cart.addItem(null, 1))
-    //             .isInstanceOf(AssertionError.class);
-    // }
-    //
-    // EXAMPLE — pre-condition holds (valid input):
-    //
-    // @Test
-    // void addItem_validInput_shouldNotThrow() {
-    //     assertThatCode(() -> cart.addItem(product, 3)).doesNotThrowAnyException();
-    // }
+    // ShoppingCart.addItem — pre-condition: product != null
     // -----------------------------------------------------------------------
 
+    @Test
+    void addItem_nullProduct_violatesPreCondition() {
+        assertThatThrownBy(() -> cart.addItem(null, 1))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    // pre-condition: quantity > 0
+    @Test
+    void addItem_zeroQuantity_violatesPreCondition() {
+        assertThatThrownBy(() -> cart.addItem(product, 0))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void addItem_negativeQuantity_violatesPreCondition() {
+        assertThatThrownBy(() -> cart.addItem(product, -5))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    // valid input — contracts hold
+    @Test
+    void addItem_validInput_contractHolds() {
+        assertThatCode(() -> cart.addItem(product, 3)).doesNotThrowAnyException();
+        assertThat(cart.itemCount()).isEqualTo(1);
+        assertThat(cart.total()).isGreaterThanOrEqualTo(0);
+    }
+
+    // -----------------------------------------------------------------------
+    // ShoppingCart.applyDiscount — pre-condition: 0 <= rate <= 100
+    // -----------------------------------------------------------------------
+
+    @Test
+    void applyDiscount_negativeRate_violatesPreCondition() {
+        cart.addItem(product, 1);
+        assertThatThrownBy(() -> cart.applyDiscount(-1))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void applyDiscount_rateOver100_violatesPreCondition() {
+        cart.addItem(product, 1);
+        assertThatThrownBy(() -> cart.applyDiscount(101))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    // post-condition: result <= total when rate > 0
+    @Test
+    void applyDiscount_validRate_postConditionHolds() {
+        cart.addItem(product, 2); // total = 20.0
+        double discounted = cart.applyDiscount(10);
+        assertThat(discounted).isLessThanOrEqualTo(cart.total());
+        assertThat(discounted).isCloseTo(18.0, within(0.001));
+    }
+
+    // -----------------------------------------------------------------------
+    // ShoppingCart invariant: total() >= 0 after any operation
+    // -----------------------------------------------------------------------
+
+    @Test
+    void invariant_totalAlwaysNonNegative_afterAddAndRemove() {
+        cart.addItem(product, 3);
+        assertThat(cart.total()).isGreaterThanOrEqualTo(0);
+        cart.removeItem("P001");
+        assertThat(cart.total()).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
+    void invariant_totalAlwaysNonNegative_afterClear() {
+        cart.addItem(product, 5);
+        cart.clear();
+        assertThat(cart.total()).isGreaterThanOrEqualTo(0);
+    }
+
+    // -----------------------------------------------------------------------
+    // PriceCalculator.calculate — pre-conditions
+    // -----------------------------------------------------------------------
+
+    @Test
+    void calculate_negativeBasePrice_violatesPreCondition() {
+        assertThatThrownBy(() -> calculator.calculate(-1, 0, 0))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void calculate_negativeDiscountRate_violatesPreCondition() {
+        assertThatThrownBy(() -> calculator.calculate(100, -1, 0))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void calculate_discountRateOver100_violatesPreCondition() {
+        assertThatThrownBy(() -> calculator.calculate(100, 101, 0))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void calculate_negativeTaxRate_violatesPreCondition() {
+        assertThatThrownBy(() -> calculator.calculate(100, 0, -1))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void calculate_taxRateOver100_violatesPreCondition() {
+        assertThatThrownBy(() -> calculator.calculate(100, 0, 101))
+            .isInstanceOf(AssertionError.class);
+    }
+
+    // post-condition: result >= 0
+    @Test
+    void calculate_validInputs_postConditionHolds() {
+        double result = calculator.calculate(100, 20, 10);
+        assertThat(result).isGreaterThanOrEqualTo(0);
+        assertThat(result).isCloseTo(88.0, within(0.001));
+    }
+
+    // valid boundary values — no exception
+    @Test
+    void calculate_boundaryValues_contractHolds() {
+        assertThatCode(() -> calculator.calculate(0, 0, 0)).doesNotThrowAnyException();
+        assertThatCode(() -> calculator.calculate(100, 100, 100)).doesNotThrowAnyException();
+    }
 }
